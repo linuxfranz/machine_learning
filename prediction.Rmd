@@ -1,0 +1,54 @@
+---
+title: "Prediction of Type of Exercise"
+author: "Franz Brummer"
+date: "28. Februar 2016"
+output: html_document
+---
+
+## Final Course Project for Practical Machine Learning
+
+The data was cleaned by removing the first seven columns (id, names, timestamps) and removing all columns from the training data that where empty or NA in the test data. Also the last column of the testing data was removed.
+
+For fit I tried first the methods "glm" and "rpart" but these didn't work at all throwing errors. So I tried random forest ("rf") which worked but seems to take forever with the default settings.
+
+Some searching on the internet (see https://github.com/lgreski/datasciencectacontent/blob/master/markdown/pml-randomForestPerformance.md) revealed the following possibilites to tune the performance of random forests:
+
+* Using all the processor cores with the library doParallel.
+* Setting trainControl and using method cross validation ("cv"). I decided for 5-fold cross validation (number=5).
+* Setting the number of trees to grow, I decided for a low ntree=10.
+* Using tunegrid to set the number of predictors getting used at each node. Here I tried mtry=4.
+
+All these measures allowed for a faster fit with relatively high accuracy (we'd expect an out of sample error of about 2%) as shown below.
+
+```{r,message=F}
+library(caret)
+library(doParallel)
+```
+
+```{r}
+set.seed(557) # for reproducibility
+cluster <- makeCluster(detectCores() - 1) # convention to leave 1 core for OS
+registerDoParallel(cluster)
+training <- read.csv("~/Projekte/Coursera/Machine\ Learning/pml-training.csv")
+testing <- read.csv("~/Projekte/Coursera/Machine\ Learning/pml-testing.csv")
+# remove unnecessary columns
+training <- subset(training, select = -c(1:7,12:36,50:59,69:83,87:101,103:112,125:139,141:150))
+testing <- subset(testing, select = -c(1:7,12:36,50:59,69:83,87:101,103:112,125:139,141:150,160))
+mtryGrid <- expand.grid(.mtry = c(4))
+ntree=10
+fitControl <- trainControl(method = "cv",
+                           number = 5,
+                           allowParallel = TRUE)
+```
+
+```{r fitModel,cache=T}
+model <- train(classe~., data=training, method="rf",trainControl=fitControl,tunegrid=mtryGrid,ntree=ntree)
+```
+
+```{r}
+print(model)
+confusionMatrix.train(model)
+predict(model,testing)
+stopCluster(cluster)
+```
+
